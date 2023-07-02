@@ -1,0 +1,226 @@
+import os
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from keras.models import Sequential
+from keras.layers import Conv1D, MaxPooling1D, Flatten, Dense
+from keras.utils import to_categorical
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+# Load files
+folderPath = "C:\\Users\\matla\\PycharmProjects\\pythonProject\\raw-accelerometry-data"
+filenameListFile = 'participant_demog.csv'
+
+# Read the file with filenames
+filenameTable = pd.read_csv(os.path.join(folderPath, filenameListFile))
+
+# Extract the filenames from the first column
+fileNames = filenameTable.iloc[:, 0].values
+
+numFiles = len(fileNames)  # Get the number of files
+
+A = np.zeros((numFiles, 3))  # Initialize the result matrix
+
+for i in range(numFiles):
+    filePath = os.path.join(folderPath, fileNames[i])  # Create the full file path
+
+    # Load the data from the file
+    data = pd.read_csv(filePath + '.csv')
+
+    # Perform calculations on the loaded data
+    Array = data.values
+    Walking = np.sum(Array[:, 0] == 1)
+    Stairs_up = np.sum(Array[:, 0] == 3)
+    Stairs_down = np.sum(Array[:, 0] == 2)
+
+    A[i, :] = [Walking, Stairs_up, Stairs_down]
+
+# Calculate the sum of each column of A
+sum_A = np.sum(A, axis=0)
+
+# Plot the results
+X = ['Walking', 'Stairs up', 'Stairs down']
+fig, ax = plt.subplots()
+ax.bar(X, sum_A, linewidth=1.0)
+plt.show()
+
+# Initialize arrays to store time and action values
+time = [None] * numFiles
+actions = [None] * numFiles
+
+for i in range(numFiles):
+    filePath = os.path.join(folderPath, fileNames[i])  # Create the full file path
+
+    # Load the data from the file
+    data = pd.read_csv(filePath + '.csv')
+
+    # Extract time and action columns from the data
+    time[i] = data['time_s']
+    actions[i] = data['activity']
+
+    # Plot the actions versus time for the current file
+    plt.figure()
+    plt.scatter(time[i], actions[i], marker='.', color='k')
+    plt.title('Actions vs. Time - File: ' + fileNames[i])
+    plt.legend(['1 - Walking \n 2 - Stairs down\n 3 - Stairs up'])
+    plt.ylim([0, 4])
+    plt.xlabel('Time')
+    plt.ylabel('Action')
+
+plt.show()
+
+# Define the columns to extract
+columns = ['lw', 'lh', 'la', 'ra']
+axis_labels = ['x', 'y', 'z']
+
+# Create the subplots
+fig, axs = plt.subplots(2, 2)
+
+for i in range(3):
+    filePath = os.path.join(folderPath, fileNames[i])  # Create the full file path
+
+    # Load the data from the file
+    data = pd.read_csv(filePath + '.csv')
+
+    # Extract time column from the data
+    time = data['time_s']
+
+    # Iterate over the desired columns and create the scatter plots
+    for j in range(3):
+        axs[j // 2, j % 2].scatter(time, data[columns[j] + '_' + axis_labels[i]], marker='.')
+        axs[j // 2, j % 2].set_xlabel('Time')
+        axs[j // 2, j % 2].set_ylabel(columns[j] + ' Axis')
+
+plt.show()
+
+# Getting rid of the data not used in the classifier
+folderPath = 'C:\\Users\\matla\\PycharmProjects\\pythonProject\\raw-accelerometry-data'
+
+# Iterate over each CSV file
+for file_index in range(1, 33):
+    filePath = os.path.join(folderPath, fileNames[file_index - 1])  # Create the full file path
+
+    # Load the data from the file
+    data = pd.read_csv(filePath + '.csv')
+
+    # Filter out rows with labels 4, 77, and 99
+    data = data[~data['activity'].isin([4, 77, 99])]
+
+    # Save the modified data to a new CSV file
+    filename = filePath.split('\\')[-1]  # Extract the filename from the full path
+    modified_csv_path = 'C:\\Users\\matla\\PycharmProjects\\pythonProject\\raw-accelerometry-data\\modified\\' + filename + '.csv'
+    data.to_csv(modified_csv_path, index=False)
+
+print("Modified CSV files saved successfully.")
+
+# Set the random seed for reproducibility
+np.random.seed(42)
+
+# Load the data and normalize it
+modified_csv_path_1 = 'C:\\Users\\matla\\PycharmProjects\\pythonProject\\raw-accelerometry-data\\modified\\'
+for file_index in range(1, 33):
+    filePath = os.path.join(modified_csv_path_1, fileNames[file_index - 1])  # Create the full file path
+
+# Set the random seed for reproducibility
+np.random.seed(42)
+
+# Load the data and normalize it
+modified_csv_path_1 = 'C:\\Users\\matla\\PycharmProjects\\pythonProject\\raw-accelerometry-data\\modified\\'
+
+all_features = []
+all_labels = []
+
+for file_index in range(1, 33):
+    filePath = os.path.join(modified_csv_path_1, fileNames[file_index - 1])  # Create the full file path
+
+    # Load the data from the file
+    data = pd.read_csv(filePath + '.csv')
+
+    # Extract the labels from the first column
+    labels = data.iloc[:, 0].values
+
+    # Extract the feature data
+    features = data.iloc[:, 1:].values
+
+    # Append the features and labels to the respective lists
+    all_features.append(features)
+    all_labels.append(labels)
+
+# Concatenate all the features and labels
+all_features = np.concatenate(all_features)
+all_labels = np.concatenate(all_labels)
+
+# Normalize the feature data using StandardScaler
+scaler = StandardScaler()
+normalized_features = scaler.fit_transform(all_features)
+
+# Shuffle the data
+indices = np.arange(normalized_features.shape[0])
+np.random.shuffle(indices)
+normalized_features = normalized_features[indices]
+all_labels = all_labels[indices]
+
+# Split the data into train and test sets
+train_features, test_features, train_labels, test_labels = train_test_split(normalized_features, all_labels, train_size=0.7, random_state=42)
+
+# Determine the number of classes in your labels
+num_classes = 3
+
+# Ensure labels are within the valid range
+train_labels = np.clip(train_labels - 1, 0, num_classes - 1)
+test_labels = np.clip(test_labels - 1, 0, num_classes - 1)
+
+# Convert labels to categorical
+train_labels = to_categorical(train_labels, num_classes=num_classes)
+test_labels = to_categorical(test_labels, num_classes=num_classes)
+
+
+
+
+# Reshape the data for CNN input
+frame_size = train_features.shape[1]
+num_channels = 1
+
+train_data = np.expand_dims(train_features, axis=2)
+test_data = np.expand_dims(test_features, axis=2)
+
+# Build the CNN model
+model = Sequential()
+model.add(Conv1D(32, 3, activation='relu', input_shape=(frame_size, num_channels)))
+model.add(MaxPooling1D(2))
+model.add(Conv1D(64, 3, activation='relu'))
+model.add(Flatten())
+model.add(Dense(64, activation='relu'))
+model.add(Dense(num_classes, activation='softmax'))
+
+# Compile the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model
+model.fit(train_data, train_labels, epochs=10, batch_size=32, validation_data=(test_data, test_labels))
+
+# Evaluate the model
+loss, accuracy = model.evaluate(test_data, test_labels)
+print("Test loss:", loss)
+print("Test accuracy:", accuracy)
+
+# Predict labels using the trained model
+predicted_labels = np.argmax(model.predict(test_data), axis=1)
+
+# Convert one-hot encoded true labels back to categorical labels
+true_labels = np.argmax(test_labels, axis=1)
+
+# Compute the confusion matrix
+C_a = confusion_matrix(true_labels, predicted_labels)
+
+# Calculate percentage values
+C_percent_a = 100 * C_a / np.sum(C_a, axis=1, keepdims=True)
+
+# Create the heatmap
+plt.figure()
+sns.heatmap(C_percent_a, annot=True, fmt=".1f", cmap="YlGnBu")
+plt.title('Confusion Matrix in [%]')
+plt.show()
